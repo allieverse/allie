@@ -1,0 +1,21 @@
+{
+	"name": "venice",
+	"description": "virtual environment interaction center",
+	"version": "0.0.0",
+	"type": "module",
+	"scripts": {
+		"dev": "vite",
+		"build": "tsc && vite build",
+		"preview": "vite preview"
+	},
+	"devDependencies": {
+		"prettier": "^3.3.3",
+		"typescript": "^5.6.2",
+		"vite": "^5.4.8",
+		"voby-vite": "^1.2.5"
+	},
+	"packageManager": "pnpm@9.4.0+sha256.b6fd0bfda555e7e584ad7e56b30c68b01d5a04f9ee93989f4b93ca8473c49c74",
+	"dependencies": {
+		"voby": "^0.58.1"
+	}
+}
