@@ -1,0 +1,8 @@
+[package]
+name = "maisie"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+cranelift = "0.112.2"
+sap = { git = "https://github.com/morr0ne/sap.git", rev = "b89fb8d5b6ade8fecd9a53e95a5d7703bd5beb30" }
