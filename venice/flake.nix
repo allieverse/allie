@@ -4,18 +4,17 @@
   };
   outputs = { self, nixpkgs }:
     let
-      forAllSystems = with nixpkgs.lib; f: foldAttrs mergeAttrs { }
-        (map (s: { ${s} = f s; }) systems.flakeExposed);
+      forEachSystem = fn: nixpkgs.lib.genAttrs
+        nixpkgs.lib.systems.flakeExposed
+        (system: fn system nixpkgs.legacyPackages.${system});
     in
     {
-      devShell = forAllSystems
-        (system:
-          let pkgs = nixpkgs.legacyPackages.${system}; in
-          pkgs.mkShell rec {
-            packages = with pkgs; [
-	      nodejs_20
-	      corepack
-            ];
-          });
+      devShell = forEachSystem
+        (system: pkgs: pkgs.mkShell rec {
+          packages = with pkgs; [
+            nodejs_20
+            corepack
+          ];
+        });
     };
 }
