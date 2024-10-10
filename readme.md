@@ -1,3 +1,2 @@
 # venice
-
-**v**irtual **en**vironment **i**nteraction **c**enter
+**v**irtual **en**vironment **i**nteraction **ce**nter
