@@ -1,12 +1,17 @@
+use crate::engine::cranelift_type_repr::HasCraneliftTypeRepr;
 use crate::engine::type_repr::{HasTypeRepr, TypeRepr};
 use crate::macro_helpers::generate_for_tuples;
 use cranelift::codegen::Context;
 use cranelift::prelude::settings::{builder as flag_builder, Configurable, Flags};
-use cranelift::prelude::AbiParam;
+use cranelift::prelude::{AbiParam, FunctionBuilder, FunctionBuilderContext, InstBuilder};
 use cranelift_jit::{JITBuilder, JITModule};
 use cranelift_module::{default_libcall_names, FuncId, Linkage, Module, ModuleError, ModuleResult};
 use std::collections::HashMap;
 use std::io::stdin;
+
+fn impl_name(name: &str) -> String {
+    String::from(name) + "__impl"
+}
 
 pub(crate) struct FunctionMetadata {
     pub(crate) id: FuncId,
@@ -49,21 +54,34 @@ macro_rules! generate_defineable_function {
                 name: &str,
                 module: &mut JITModule,
                 functions: &mut HashMap<String, FunctionMetadata>,
-                ctx: &mut Context,
+                context: &mut Context,
             ) -> ModuleResult<()> {
-                let mut sig = module.make_signature();
-                $(sig.params.push(AbiParam::new($t::get_cranelift_type_repr()));)*
+                context.clear();
+                let signature = &mut context.func.signature;
+                $(signature.params.push(AbiParam::new($t::get_cranelift_type_repr()));)*
                 let return_repr = R::get_type_repr();
                 if return_repr != TypeRepr::Unit {
-                    sig.returns.push(AbiParam::new(R::get_cranelift_type_repr()));
+                    signature.returns.push(AbiParam::new(R::get_cranelift_type_repr()));
                 }
-                let r#fn = module.declare_function(name, Linkage::Export, &sig)?;
-                let metadata = FunctionMetadata {
-                    id: r#fn,
-                    r#type: Self::get_type_repr(),
-                };
+                let original_fn = module.declare_function(impl_name(name).as_str(), Linkage::Local, &signature)?;
+                let r#fn = module.declare_function(name, Linkage::Export, &signature)?;
+                let mut function_builder_context = FunctionBuilderContext::new();
+                let mut function_builder = FunctionBuilder::new(&mut context.func, &mut function_builder_context);
+                let entry_block = function_builder.create_block();
+                function_builder.append_block_params_for_function_params(entry_block);
+                function_builder.switch_to_block(entry_block);
+                function_builder.seal_block(entry_block);
+                let local_callee = module.declare_func_in_func(original_fn, function_builder.func);
+                let params = function_builder.block_params(entry_block).to_vec();
+                let call = function_builder.ins().call(local_callee, &params);
+                let results = function_builder.inst_results(call).to_vec();
+                function_builder.ins().return_(&results);
+                function_builder.finalize();
+                let metadata = FunctionMetadata { id: r#fn, r#type: Self::get_type_repr() };
                 functions.insert(name.into(), metadata);
-                module.define_function(r#fn, ctx)
+                module.define_function(r#fn, context)?;
+                module.clear_context(context);
+                Ok(())
             }
         }
     };
@@ -79,25 +97,21 @@ macro_rules! define_module {
         let mut flag_builder = flag_builder();
         flag_builder.set("use_colocated_libcalls", "false")?;
         flag_builder.set("is_pic", "false")?;
-        /* isa = Instruction Set Architecture */
         let isa_builder = cranelift_native::builder().unwrap_or_else(|msg| {
             panic!("host machine is not supported: {msg}");
         });
-        let isa = isa_builder
-            .finish(Flags::new(flag_builder))?;
+        let isa = isa_builder.finish(Flags::new(flag_builder))?;
         let mut builder = JITBuilder::with_isa(isa, default_libcall_names());
-        $(builder.symbol($name, $impl as *const u8);)*
+        $(builder.symbol(impl_name($name), $impl as *const u8);)*
         let mut module = JITModule::new(builder);
         let mut functions = HashMap::<String, FunctionMetadata>::new();
-        let mut ctx = module.make_context();
-        $(DefineableFunction::define_function(&$impl, $name, &mut module, &mut functions, &mut ctx)?;)*
+        let mut context = module.make_context();
+        $(DefineableFunction::define_function(&$impl, $name, &mut module, &mut functions, &mut context)?;)*
         module.finalize_definitions()?;
         Ok(JITModuleWithMetadata { module, functions })
     };
 }
 pub use define_module;
-
-use super::cranelift_type_repr::HasCraneliftTypeRepr;
 
 pub(crate) fn make_stdio_module() -> Result<JITModuleWithMetadata, ModuleError> {
     define_module! {

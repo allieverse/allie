@@ -1,18 +1,18 @@
 use crate::macro_helpers::generate_for_tuples;
 
-#[derive(PartialEq, Eq)]
+#[derive(PartialEq, Eq, Debug)]
 pub struct StructMember {
     pub name: String,
     pub r#type: TypeRepr,
 }
 
-#[derive(PartialEq, Eq)]
+#[derive(PartialEq, Eq, Debug)]
 pub struct EnumMember {
     pub name: String,
     pub r#type: TypeRepr,
 }
 
-#[derive(PartialEq, Eq)]
+#[derive(PartialEq, Eq, Debug)]
 pub enum TypeRepr {
     Unit,
     I8,
