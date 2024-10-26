@@ -14,6 +14,7 @@ pub struct EnumMember {
 
 #[derive(PartialEq, Eq, Debug)]
 pub enum TypeRepr {
+    Newtype(Box<TypeRepr>),
     Unit,
     I8,
     I16,
