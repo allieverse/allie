@@ -3,7 +3,7 @@ import Widget from "../../components/Widget";
 import { removeDragImage } from "../../utils/drag";
 import type { ModelProps } from "../../utils/model";
 import { readonlyArray, unknown, UnwrapPredicate } from "../../utils/typecheck";
-import { observable } from "../../utils/observable";
+import { projectIndex } from "../../utils/observable";
 
 export const matches = readonlyArray(unknown);
 export type Type = UnwrapPredicate<typeof matches>;
@@ -79,7 +79,7 @@ export default function ({ value }: Props) {
 			<span class="title">list</span>
 			<ol>
 				{() =>
-					value().map((item, i) => (
+					value().map((_item, i) => (
 						<li
 							ref={(el) => {
 								const dragInfo_ = dragInfo();
@@ -117,16 +117,7 @@ export default function ({ value }: Props) {
 									/>
 								</svg>
 							</div>
-							<Widget
-								value={observable(
-									() => item,
-									(newItem) => {
-										const result = [...value()];
-										result[i] = newItem;
-										value(result);
-									},
-								)}
-							/>
+							<Widget value={projectIndex(value, i)} />
 						</li>
 					))
 				}
@@ -158,16 +149,7 @@ export default function ({ value }: Props) {
 										stroke-linejoin="round"
 									/>
 								</svg>
-								<Widget
-									value={observable(
-										() => value()[dragInfo_.index],
-										(newItem) => {
-											const newValue = [...value()];
-											newValue[dragInfo_.index] = newItem;
-											value(newValue);
-										},
-									)}
-								/>
+								<Widget value={projectIndex(value, dragInfo_.index)} />
 							</div>
 						</Portal>
 					)

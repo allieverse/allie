@@ -3,7 +3,7 @@ import { removeDragImage } from "../../utils/drag";
 import type { ModelProps } from "../../utils/model";
 import { readonlyRecord, string, unknown, UnwrapPredicate } from "../../utils/typecheck";
 import { $, Observable, Portal, useEventListener } from "voby";
-import { observable, withObservables } from "../../utils/observable";
+import { observable, projectKey, withObservables } from "../../utils/observable";
 
 export const matches = readonlyRecord(string, unknown);
 export type Type = UnwrapPredicate<typeof matches>;
@@ -96,7 +96,7 @@ export default function ({ value }: Props) {
 			<table>
 				<tbody>
 					{() =>
-						Object.entries(value()).map(([k, item], i) => (
+						Object.keys(value()).map((k, i) => (
 							<tr
 								ref={(el) => {
 									const dragInfo_ = dragInfo();
@@ -149,16 +149,7 @@ export default function ({ value }: Props) {
 									:&nbsp;
 								</td>
 								<td>
-									<Widget
-										value={observable(
-											() => item,
-											(newItem) => {
-												const result = { ...value() };
-												result[k] = newItem;
-												value(result);
-											},
-										)}
-									/>
+									<Widget value={projectKey(value, k)} />
 								</td>
 							</tr>
 						))
@@ -228,16 +219,7 @@ export default function ({ value }: Props) {
 									/>
 								</svg>
 								{dragInfo_.key}:&nbsp;
-								<Widget
-									value={observable(
-										() => value()[dragInfo_.key],
-										(newItem) => {
-											const newValue = { ...value() };
-											newValue[dragInfo_.key] = newItem;
-											value(newValue);
-										},
-									)}
-								/>
+								<Widget value={projectKey(value, dragInfo_.key)} />
 							</div>
 						</Portal>
 					)
