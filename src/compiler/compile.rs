@@ -1,11 +1,12 @@
 use crate::engine::syntax::Syntax;
+use cranelift::codegen::ir::FuncRef;
 use cranelift::codegen::Context;
 use cranelift::prelude::settings::{builder as flag_builder, Configurable, Flags};
 use cranelift::prelude::{
     types, Block, FunctionBuilder, FunctionBuilderContext, InstBuilder, Value,
 };
 use cranelift_jit::{JITBuilder, JITModule};
-use cranelift_module::{default_libcall_names, FuncId, Linkage, Module, ModuleError};
+use cranelift_module::{default_libcall_names, FuncId, FuncOrDataId, Linkage, Module, ModuleError};
 
 pub(crate) struct CompileContext {
     module: JITModule,
@@ -13,7 +14,6 @@ pub(crate) struct CompileContext {
     builder: FunctionBuilderContext,
 }
 
-// wtf
 pub(crate) fn new_context() -> Result<CompileContext, ModuleError> {
     let mut flag_builder = flag_builder();
     flag_builder.set("use_colocated_libcalls", "false")?;
@@ -44,7 +44,7 @@ pub(crate) fn compile(
         .declare_function(name, Linkage::Export, &signature)?;
     let mut function_builder =
         FunctionBuilder::new(&mut context.context.func, &mut context.builder);
-    let value = compile_syntax(syntax, &mut function_builder);
+    let value = compile_syntax(syntax, &mut context.module, &mut function_builder)?;
     function_builder.ins().return_(&[value]);
     function_builder.finalize();
     context.module.define_function(r#fn, &mut context.context)?;
@@ -52,12 +52,33 @@ pub(crate) fn compile(
     Ok(r#fn)
 }
 
+pub(crate) fn get_function(
+    syntax: &Syntax,
+    module: &mut JITModule,
+    builder: &mut FunctionBuilder,
+) -> Result<FuncRef, ModuleError> {
+    match syntax {
+        Syntax::Reference { name } => {
+            if let Some(FuncOrDataId::Func(func_id)) = module.get_name(name) {
+                Ok(module.declare_func_in_func(func_id, builder.func))
+            } else {
+                Err(ModuleError::Undeclared(name.clone()))
+            }
+        }
+        _ => Err(ModuleError::Undeclared(format!("{:?}", syntax))),
+    }
+}
+
 fn nothing(builder: &mut FunctionBuilder) -> Value {
     builder.ins().iconst(types::I8, 0)
 }
 
-fn compile_syntax(syntax: &Syntax, builder: &mut FunctionBuilder) -> Value {
-    match syntax {
+fn compile_syntax(
+    syntax: &Syntax,
+    module: &mut JITModule,
+    builder: &mut FunctionBuilder,
+) -> Result<Value, ModuleError> {
+    Ok(match syntax {
         Syntax::Text { value } => todo!(),
         Syntax::Integer { value } => builder.ins().iconst(types::I64, *value),
         Syntax::Number { value } => builder.ins().f64const(*value),
@@ -69,16 +90,17 @@ fn compile_syntax(syntax: &Syntax, builder: &mut FunctionBuilder) -> Value {
             function,
             parameters,
         } => {
-            let function = compile_syntax(function, builder);
+            let func_ref = get_function(function, module, builder)?;
             let args = parameters
                 .into_iter()
-                .map(|parameter| compile_syntax(parameter, builder))
-                .collect::<Vec<Value>>();
-            let call = builder.ins().call(function, args.as_slice());
+                .map(|parameter: &Syntax| compile_syntax(parameter, module, builder))
+                .collect::<Result<Vec<_>, _>>()?;
+            let call = builder.ins().call(func_ref, args.as_slice());
             builder
                 .inst_results(call)
                 .first()
-                .map_or_else(|| nothing(builder), |value| *value)
+                .map(|value| *value)
+                .unwrap_or_else(|| nothing(builder))
         }
         Syntax::Function { name, body } => todo!(),
         Syntax::Block { statements } => todo!(),
@@ -89,12 +111,14 @@ fn compile_syntax(syntax: &Syntax, builder: &mut FunctionBuilder) -> Value {
         } => {
             let block_start = builder.create_block();
             let mut block_merge = builder.create_block();
-            let block_then = compile_block(then_statements, builder, Some(&mut block_merge));
-            let block_else = compile_block(else_statements, builder, Some(&mut block_merge));
+            let block_then =
+                compile_block(then_statements, module, builder, Some(&mut block_merge))?;
+            let block_else =
+                compile_block(else_statements, module, builder, Some(&mut block_merge))?;
 
             builder.switch_to_block(block_start);
             builder.seal_block(block_start);
-            let condition = compile_syntax(condition, builder);
+            let condition = compile_syntax(condition, module, builder)?;
             builder
                 .ins()
                 .brif(condition, block_then, &[], block_else, &[]);
@@ -108,12 +132,12 @@ fn compile_syntax(syntax: &Syntax, builder: &mut FunctionBuilder) -> Value {
             statements,
         } => {
             let block_start = builder.create_block();
-            let mut block_end = builder.create_block();
-            let block_body = compile_block(statements, builder, None);
+            let block_end = builder.create_block();
+            let block_body = compile_block(statements, module, builder, None)?;
 
             builder.switch_to_block(block_start);
             builder.seal_block(block_start);
-            let condition = compile_syntax(condition, builder);
+            let condition = compile_syntax(condition, module, builder)?;
             builder
                 .ins()
                 .brif(condition, block_body, &[], block_end, &[]);
@@ -122,24 +146,25 @@ fn compile_syntax(syntax: &Syntax, builder: &mut FunctionBuilder) -> Value {
             builder.seal_block(block_end);
             builder.block_params(block_end)[0]
         }
-    }
+    })
 }
 
 pub(crate) fn compile_block(
     statements: &Vec<Syntax>,
+    module: &mut JITModule,
     builder: &mut FunctionBuilder,
     return_block: Option<&mut Block>,
-) -> Block {
+) -> Result<Block, ModuleError> {
     let block = builder.create_block();
     builder.switch_to_block(block);
     builder.seal_block(block);
     let mut value = None;
     for statement in statements {
-        value = Some(compile_syntax(statement, builder));
+        value = Some(compile_syntax(statement, module, builder)?);
     }
     if let Some(return_block) = return_block {
         let value = value.unwrap_or_else(|| builder.ins().iconst(types::I64, 0));
         builder.ins().jump(*return_block, &[value]);
     }
-    block
+    Ok(block)
 }
