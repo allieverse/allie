@@ -40,10 +40,6 @@ pub(crate) enum Syntax {
         then_statements: Vec<Syntax>,
         else_statements: Vec<Syntax>,
     },
-    For {
-        iterable: Box<Syntax>,
-        statements: Vec<Syntax>,
-    },
     While {
         condition: Box<Syntax>,
         statements: Vec<Syntax>,

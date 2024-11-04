@@ -1,5 +1,4 @@
 use crate::engine::syntax::Syntax;
-use cranelift::codegen::ir::FuncRef;
 use cranelift::codegen::Context;
 use cranelift::prelude::settings::{builder as flag_builder, Configurable, Flags};
 use cranelift::prelude::{
@@ -53,20 +52,34 @@ pub(crate) fn compile(
     Ok(r#fn)
 }
 
+fn nothing(builder: &mut FunctionBuilder) -> Value {
+    builder.ins().iconst(types::I8, 0)
+}
+
 fn compile_syntax(syntax: &Syntax, builder: &mut FunctionBuilder) -> Value {
     match syntax {
         Syntax::Text { value } => todo!(),
         Syntax::Integer { value } => builder.ins().iconst(types::I64, *value),
         Syntax::Number { value } => builder.ins().f64const(*value),
-        // TODO: should bools be `i8`?
-        Syntax::Truth { value } => builder.ins().iconst(types::I64, if *value { 1 } else { 0 }),
+        Syntax::Truth { value } => builder.ins().iconst(types::I8, if *value { 1 } else { 0 }),
         Syntax::Variable { name, initializer } => todo!(),
         Syntax::Reference { name } => todo!(),
-        Syntax::Nothing {} => todo!(),
+        Syntax::Nothing {} => nothing(builder),
         Syntax::Call {
             function,
             parameters,
-        } => todo!(),
+        } => {
+            let function = compile_syntax(function, builder);
+            let args = parameters
+                .into_iter()
+                .map(|parameter| compile_syntax(parameter, builder))
+                .collect::<Vec<Value>>();
+            let call = builder.ins().call(function, args.as_slice());
+            builder
+                .inst_results(call)
+                .first()
+                .map_or_else(|| nothing(builder), |value| *value)
+        }
         Syntax::Function { name, body } => todo!(),
         Syntax::Block { statements } => todo!(),
         Syntax::If {
@@ -74,41 +87,59 @@ fn compile_syntax(syntax: &Syntax, builder: &mut FunctionBuilder) -> Value {
             then_statements,
             else_statements,
         } => {
-            let condition = compile_syntax(condition, builder);
+            let block_start = builder.create_block();
             let mut block_merge = builder.create_block();
-            let block_then = compile_block(then_statements, builder, &mut block_merge);
-            let block_else = compile_block(else_statements, builder, &mut block_merge);
+            let block_then = compile_block(then_statements, builder, Some(&mut block_merge));
+            let block_else = compile_block(else_statements, builder, Some(&mut block_merge));
+
+            builder.switch_to_block(block_start);
+            builder.seal_block(block_start);
+            let condition = compile_syntax(condition, builder);
             builder
                 .ins()
                 .brif(condition, block_then, &[], block_else, &[]);
+
             builder.switch_to_block(block_merge);
             builder.seal_block(block_merge);
             builder.block_params(block_merge)[0]
         }
-        Syntax::For {
-            iterable,
-            statements,
-        } => todo!(),
         Syntax::While {
             condition,
             statements,
-        } => todo!(),
+        } => {
+            let block_start = builder.create_block();
+            let mut block_end = builder.create_block();
+            let block_body = compile_block(statements, builder, None);
+
+            builder.switch_to_block(block_start);
+            builder.seal_block(block_start);
+            let condition = compile_syntax(condition, builder);
+            builder
+                .ins()
+                .brif(condition, block_body, &[], block_end, &[]);
+
+            builder.switch_to_block(block_end);
+            builder.seal_block(block_end);
+            builder.block_params(block_end)[0]
+        }
     }
 }
 
 pub(crate) fn compile_block(
     statements: &Vec<Syntax>,
     builder: &mut FunctionBuilder,
-    return_block: &mut Block,
+    return_block: Option<&mut Block>,
 ) -> Block {
     let block = builder.create_block();
     builder.switch_to_block(block);
     builder.seal_block(block);
     let mut value = None;
     for statement in statements {
-        // FIXME:
+        value = Some(compile_syntax(statement, builder));
     }
-    let value = value.unwrap_or_else(|| builder.ins().iconst(types::I64, 0));
-    builder.ins().jump(*return_block, &[value]);
+    if let Some(return_block) = return_block {
+        let value = value.unwrap_or_else(|| builder.ins().iconst(types::I64, 0));
+        builder.ins().jump(*return_block, &[value]);
+    }
     block
 }
