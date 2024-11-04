@@ -1,8 +1,9 @@
+mod compiler;
 mod engine;
 mod macro_helpers;
 
-use crate::engine::compile::{compile, new_context};
-use crate::engine::modules::make_stdio_module;
+use crate::compiler::compile::{compile, new_context};
+use crate::compiler::modules::make_stdio_module;
 use crate::engine::syntax::Syntax;
 use cranelift_module::ModuleError;
 use std::mem::transmute;

@@ -1,4 +1,4 @@
-use crate::engine::cranelift_type_repr::HasCraneliftTypeRepr;
+use crate::compiler::cranelift_type_repr::HasCraneliftTypeRepr;
 use crate::engine::type_repr::{HasTypeRepr, TypeRepr};
 use crate::macro_helpers::generate_for_tuples;
 use cranelift::codegen::Context;
