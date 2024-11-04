@@ -1,4 +1,5 @@
-use crate::engine::syntax::Syntax;
+use crate::repr::syntax::Syntax;
+
 use cranelift::codegen::ir::FuncRef;
 use cranelift::codegen::Context;
 use cranelift::prelude::settings::{builder as flag_builder, Configurable, Flags};

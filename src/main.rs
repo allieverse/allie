@@ -1,10 +1,11 @@
 mod compiler;
-mod engine;
+mod function_evaluator;
 mod macro_helpers;
+mod repr;
 
 use crate::compiler::compile::{compile, new_context};
 use crate::compiler::modules::make_stdio_module;
-use crate::engine::syntax::Syntax;
+use crate::repr::syntax::Syntax;
 use cranelift_module::ModuleError;
 use std::mem::transmute;
 

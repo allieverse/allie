@@ -1,6 +1,6 @@
 use crate::compiler::cranelift_type_repr::HasCraneliftTypeRepr;
-use crate::engine::type_repr::{HasTypeRepr, TypeRepr};
 use crate::macro_helpers::generate_for_tuples;
+use crate::repr::type_repr::{HasTypeRepr, TypeRepr};
 use cranelift::codegen::Context;
 use cranelift::prelude::settings::{builder as flag_builder, Configurable, Flags};
 use cranelift::prelude::{AbiParam, FunctionBuilder, FunctionBuilderContext, InstBuilder};
