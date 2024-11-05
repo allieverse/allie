@@ -4,7 +4,7 @@ use std::rc::Rc;
 
 #[derive(Clone)]
 pub(crate) enum ValueUnion {
-    Text(String),
+    Text(Rc<str>),
     Integer(i64),
     Number(f64),
     Truth(bool),

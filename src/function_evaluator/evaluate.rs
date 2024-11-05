@@ -8,7 +8,7 @@ use super::value_union::ValueUnion;
 pub(crate) fn syntax_to_function(syntax: &Syntax) -> Box<dyn Fn(&mut Scope) -> ValueUnion> {
     match syntax {
         Syntax::Text { value } => {
-            let value = value.clone();
+            let value = value.0.clone();
             Box::new(move |_| ValueUnion::Text(value.clone()))
         }
         Syntax::Integer { value } => {
