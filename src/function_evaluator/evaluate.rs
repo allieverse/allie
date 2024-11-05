@@ -1,11 +1,15 @@
+use std::cell::RefCell;
 use std::rc::Rc;
 
 use crate::function_evaluator::scope::Scope;
+use crate::function_evaluator::value_union::ValueUnion;
 use crate::repr::syntax::Syntax;
 
-use super::value_union::ValueUnion;
+use super::value_union::FunctionPointer;
 
-pub(crate) fn syntax_to_function(syntax: &Syntax) -> Box<dyn Fn(&mut Scope) -> ValueUnion> {
+pub(crate) fn syntax_to_function(
+    syntax: &Syntax,
+) -> Box<dyn Fn(&mut Rc<RefCell<Scope>>) -> ValueUnion> {
     match syntax {
         Syntax::Text { value } => {
             let value = value.0.clone();
@@ -29,13 +33,13 @@ pub(crate) fn syntax_to_function(syntax: &Syntax) -> Box<dyn Fn(&mut Scope) -> V
             let initializer = syntax_to_function(initializer);
             Box::new(move |s| {
                 let value = initializer(s);
-                s.insert(&name, &value);
+                s.borrow_mut().insert(&name, &value);
                 ValueUnion::Nothing
             })
         }
         Syntax::Reference { name } => {
             let name = name.clone();
-            Box::new(move |s| s.get(&name).unwrap_or(ValueUnion::Nothing))
+            Box::new(move |s| (**s).borrow().get(&name).unwrap_or(ValueUnion::Nothing))
         }
         Syntax::Call {
             function,
@@ -49,8 +53,11 @@ pub(crate) fn syntax_to_function(syntax: &Syntax) -> Box<dyn Fn(&mut Scope) -> V
             // FIXME: function arguments
             let name = name.clone();
             let body = syntax_to_function(body);
-            let f = ValueUnion::Function(Rc::new(body));
-            Box::new(move |s| s.insert(&name, &f))
+            let f = ValueUnion::Function(FunctionPointer(Rc::new(move |s| {
+                let mut child = Scope::new_child(s);
+                body(&mut child)
+            })));
+            Box::new(move |s| s.borrow_mut().insert(&name, &f))
         }
         Syntax::Block { statements } => block_to_function(statements),
         Syntax::If {
@@ -76,8 +83,9 @@ pub(crate) fn syntax_to_function(syntax: &Syntax) -> Box<dyn Fn(&mut Scope) -> V
             let condition = syntax_to_function(&condition);
             let statements = block_to_function(statements);
             Box::new(move |s| {
+                let mut child = Scope::new_child(s);
                 while condition(s) == ValueUnion::Truth(true) {
-                    statements(s);
+                    statements(&mut child);
                 }
                 ValueUnion::Nothing
             })
@@ -85,7 +93,9 @@ pub(crate) fn syntax_to_function(syntax: &Syntax) -> Box<dyn Fn(&mut Scope) -> V
     }
 }
 
-fn block_to_function(statements: &Vec<Syntax>) -> Box<dyn Fn(&mut Scope) -> ValueUnion> {
+fn block_to_function(
+    statements: &Vec<Syntax>,
+) -> Box<dyn Fn(&mut Rc<RefCell<Scope>>) -> ValueUnion> {
     let statements = statements
         .iter()
         .map(syntax_to_function)
