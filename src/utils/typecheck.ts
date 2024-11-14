@@ -10,6 +10,7 @@ const deepEqual = <T>(a: T, b: T) => {
 	if (Array.isArray(a) && Array.isArray(b)) {
 		if (a.length !== b.length) return false;
 	}
+	if (Object.keys(a).length !== Object.keys(b).length) return false;
 	for (const k in a) {
 		if (!(k in b) || !deepEqual(a[k], b[k])) return false;
 	}
