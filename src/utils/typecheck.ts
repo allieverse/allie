@@ -18,9 +18,9 @@ const deepEqual = <T>(a: T, b: T) => {
 };
 
 // Arbitrary checks
-export const any = predicate((x): x is any => true);
-export const unknown = predicate((x): x is unknown => true);
-export const never = predicate((x): x is never => false);
+export const any = predicate((_x): _x is any => true);
+export const unknown = predicate((_x): _x is unknown => true);
+export const never = predicate((_x): _x is never => false);
 
 // Literals
 export const literal = <const T>(value: T) => predicate((x): x is T => deepEqual(value, x));
